@@ -1,0 +1,27 @@
+{
+  "name": "web-pilot",
+  "version": "1.0.0",
+  "description": "An LLM-driven browser automation tool that enables AI copilots to navigate websites and perform actions",
+  "main": "src/pilot.js",
+  "bin": {
+    "web-pilot": "./src/cli.js"
+  },
+  "scripts": {
+    "start": "node src/pilot.js",
+    "pilot": "node src/pilot.js",
+    "install-browser": "npx playwright install chromium"
+  },
+  "keywords": [
+    "browser-automation",
+    "playwright",
+    "llm",
+    "ai-copilot",
+    "web-scraping",
+    "automation"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "playwright": "^1.40.0"
+  }
+}
