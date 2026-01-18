@@ -21,6 +21,7 @@ USAGE:
 OPTIONS:
   --url, -u <url>        Starting URL to navigate to
   --dir, -d <path>       Working directory for command/result files (default: current dir)
+  --profile <path>       Chrome profile path (enables persistent context with saved passwords/cookies)
   --headless             Run browser in headless mode
   --help, -h             Show this help message
 
@@ -29,6 +30,7 @@ EXAMPLES:
   web-pilot https://example.com
   web-pilot -u https://github.com -d ./output
   web-pilot --headless -u https://example.com
+  web-pilot --profile "C:\Users\username\AppData\Local\Google\Chrome\User Data"
 
 HOW IT WORKS:
   1. Web Pilot starts a browser and watches for commands in 'command.txt'
@@ -67,7 +69,8 @@ function parseArgs(args) {
   const config = {
     url: null,
     workDir: process.cwd(),
-    headless: false
+    headless: false,
+    profile: null
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -82,6 +85,8 @@ function parseArgs(args) {
       config.url = args[++i];
     } else if (arg === '--dir' || arg === '-d') {
       config.workDir = path.resolve(args[++i]);
+    } else if (arg === '--profile') {
+      config.profile = args[++i];
     } else if (arg === '--headless') {
       config.headless = true;
     } else if (!arg.startsWith('-') && !config.url) {
@@ -106,7 +111,8 @@ async function main() {
 
   const pilot = new WebPilot({
     workDir: config.workDir,
-    headless: config.headless
+    headless: config.headless,
+    profile: config.profile
   });
 
   await pilot.start(config.url);

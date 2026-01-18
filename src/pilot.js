@@ -19,7 +19,8 @@ const DEFAULT_CONFIG = {
   headless: false,
   pollInterval: 1000,
   timeout: 30000,
-  viewport: { width: 1400, height: 900 }
+  viewport: { width: 1400, height: 900 },
+  profile: null
 };
 
 class WebPilot {
@@ -66,16 +67,31 @@ class WebPilot {
   async start(initialUrl = null) {
     console.log('🚀 Web Pilot - Starting browser...\n');
     
-    this.browser = await chromium.launch({
-      headless: this.config.headless,
-      args: ['--start-maximized']
-    });
+    if (this.config.profile) {
+      // Use persistent context when profile path is provided
+      console.log(`📂 Using Chrome profile: ${this.config.profile}`);
+      this.context = await chromium.launchPersistentContext(this.config.profile, {
+        headless: this.config.headless,
+        viewport: this.config.viewport,
+        args: ['--start-maximized']
+      });
+      
+      // Get the first page or create a new one
+      const pages = this.context.pages();
+      this.page = pages.length > 0 ? pages[0] : await this.context.newPage();
+    } else {
+      // Standard launch without profile
+      this.browser = await chromium.launch({
+        headless: this.config.headless,
+        args: ['--start-maximized']
+      });
 
-    this.context = await this.browser.newContext({
-      viewport: this.config.viewport
-    });
-    
-    this.page = await this.context.newPage();
+      this.context = await this.browser.newContext({
+        viewport: this.config.viewport
+      });
+      
+      this.page = await this.context.newPage();
+    }
 
     if (initialUrl) {
       console.log(`📍 Navigating to: ${initialUrl}`);
@@ -185,7 +201,12 @@ class WebPilot {
       
       if (cmd === 'quit') {
         this.running = false;
-        await this.browser.close();
+        // Close browser or persistent context depending on which was used
+        if (this.browser) {
+          await this.browser.close();
+        } else if (this.context) {
+          await this.context.close();
+        }
         console.log('👋 Browser closed. Goodbye!');
         process.exit(0);
       }
