@@ -21,14 +21,21 @@ USAGE:
 OPTIONS:
   --url, -u <url>        Starting URL to navigate to
   --dir, -d <path>       Working directory for command/result files (default: current dir)
-  --browser <type>       Browser to use: chrome (default) or edge
-  --profile <path>       Browser profile path (enables persistent context with saved passwords/cookies)
+  --browser <type>       Browser to use: chrome or edge (auto-detected if not specified)
+  --profile <path>       Browser profile path (auto-detected if not specified)
+  --no-profile           Disable profile - use fresh browser session
   --headless             Run browser in headless mode
   --help, -h             Show this help message
 
+AUTO-DETECTION:
+  By default, web-pilot automatically detects your system's default browser
+  and uses its profile (with saved passwords, cookies, etc.). This means you
+  can just run 'web-pilot' without any arguments!
+
 EXAMPLES:
-  web-pilot
+  web-pilot                    # Auto-detect browser and profile
   web-pilot https://example.com
+  web-pilot --no-profile       # Use fresh session without profile
   web-pilot -u https://github.com -d ./output
   web-pilot --headless -u https://example.com
   web-pilot --browser edge
@@ -73,8 +80,9 @@ function parseArgs(args) {
     url: null,
     workDir: process.cwd(),
     headless: false,
-    browser: 'chrome',
-    profile: null
+    browser: null, // Will be auto-detected if not specified
+    profile: undefined, // undefined means auto-detect, null means disabled
+    autoProfile: true
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -99,6 +107,10 @@ function parseArgs(args) {
       }
     } else if (arg === '--profile') {
       config.profile = args[++i];
+      config.autoProfile = false;
+    } else if (arg === '--no-profile') {
+      config.profile = null;
+      config.autoProfile = false;
     } else if (arg === '--headless') {
       config.headless = true;
     } else if (!arg.startsWith('-') && !config.url) {

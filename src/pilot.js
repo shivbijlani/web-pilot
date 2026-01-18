@@ -11,6 +11,7 @@ const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const os = require('os');
 
 // Default configuration
 const DEFAULT_CONFIG = {
@@ -26,8 +27,65 @@ const DEFAULT_CONFIG = {
 };
 
 class WebPilot {
+  /**
+   * Detect the system's default browser
+   */
+  static detectDefaultBrowser() {
+    try {
+      if (process.platform !== 'win32') {
+        return 'chrome'; // Default to Chrome on non-Windows
+      }
+      
+      // Query Windows registry for default browser
+      const result = execSync(
+        'reg query "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\http\\UserChoice" /v ProgId',
+        { encoding: 'utf-8' }
+      );
+      
+      // Parse the result to find browser type
+      if (result.includes('MSEdge') || result.includes('EdgeHTML')) {
+        return 'edge';
+      } else if (result.includes('Chrome')) {
+        return 'chrome';
+      }
+      
+      return 'chrome'; // Default fallback
+    } catch (err) {
+      return 'chrome'; // Default fallback on error
+    }
+  }
+
+  /**
+   * Get default profile path for a browser
+   */
+  static getDefaultProfilePath(browserType) {
+    try {
+      const username = os.userInfo().username;
+      const userProfile = process.env.USERPROFILE || `C:\\Users\\${username}`;
+      
+      if (browserType === 'edge') {
+        return path.join(userProfile, 'AppData', 'Local', 'Microsoft', 'Edge', 'User Data');
+      } else {
+        return path.join(userProfile, 'AppData', 'Local', 'Google', 'Chrome', 'User Data');
+      }
+    } catch (err) {
+      return null;
+    }
+  }
+
   constructor(config = {}) {
-    this.config = { ...DEFAULT_CONFIG, ...config };
+    // Auto-detect browser and profile if not provided
+    const detectedBrowser = config.browser || WebPilot.detectDefaultBrowser();
+    const detectedProfile = config.profile !== undefined ? config.profile : 
+                           (config.autoProfile !== false ? WebPilot.getDefaultProfilePath(detectedBrowser) : null);
+    
+    this.config = { 
+      ...DEFAULT_CONFIG, 
+      ...config,
+      browser: detectedBrowser,
+      profile: detectedProfile
+    };
+    
     this.browser = null;
     this.context = null;
     this.page = null;
@@ -103,7 +161,14 @@ class WebPilot {
    */
   async start(initialUrl = null) {
     const browserName = this.config.browser === 'edge' ? 'Edge' : 'Chrome';
-    console.log(`🚀 Web Pilot - Starting ${browserName}...\n`);
+    
+    // Show what was detected/configured
+    if (!this.config.profile) {
+      console.log(`🚀 Web Pilot - Starting ${browserName}...\n`);
+    } else {
+      const wasAutoDetected = !arguments[0] && !process.argv.includes('--profile');
+      console.log(`🚀 Web Pilot - Starting ${browserName}${wasAutoDetected ? ' (auto-detected)' : ''}...\n`);
+    }
     
     // Determine Playwright channel based on browser choice
     const channel = this.config.browser === 'edge' ? 'msedge' : undefined;
