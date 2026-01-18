@@ -17,6 +17,7 @@ const DEFAULT_CONFIG = {
   resultFile: 'result.txt',
   workDir: process.cwd(),
   headless: false,
+  browser: 'chrome',
   pollInterval: 1000,
   timeout: 30000,
   viewport: { width: 1400, height: 900 },
@@ -65,26 +66,36 @@ class WebPilot {
    * Start the browser and begin listening for commands
    */
   async start(initialUrl = null) {
-    console.log('🚀 Web Pilot - Starting browser...\n');
+    const browserName = this.config.browser === 'edge' ? 'Edge' : 'Chrome';
+    console.log(`🚀 Web Pilot - Starting ${browserName}...\n`);
+    
+    // Determine Playwright channel based on browser choice
+    const channel = this.config.browser === 'edge' ? 'msedge' : undefined;
     
     if (this.config.profile) {
       // Use persistent context when profile path is provided
-      console.log(`📂 Using Chrome profile: ${this.config.profile}`);
-      this.context = await chromium.launchPersistentContext(this.config.profile, {
+      console.log(`📂 Using ${browserName} profile: ${this.config.profile}`);
+      const launchOptions = {
         headless: this.config.headless,
         viewport: this.config.viewport,
         args: ['--start-maximized']
-      });
+      };
+      if (channel) launchOptions.channel = channel;
+      
+      this.context = await chromium.launchPersistentContext(this.config.profile, launchOptions);
       
       // Get the first page or create a new one
       const pages = this.context.pages();
       this.page = pages.length > 0 ? pages[0] : await this.context.newPage();
     } else {
       // Standard launch without profile
-      this.browser = await chromium.launch({
+      const launchOptions = {
         headless: this.config.headless,
         args: ['--start-maximized']
-      });
+      };
+      if (channel) launchOptions.channel = channel;
+      
+      this.browser = await chromium.launch(launchOptions);
 
       this.context = await this.browser.newContext({
         viewport: this.config.viewport

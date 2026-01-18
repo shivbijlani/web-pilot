@@ -21,7 +21,8 @@ USAGE:
 OPTIONS:
   --url, -u <url>        Starting URL to navigate to
   --dir, -d <path>       Working directory for command/result files (default: current dir)
-  --profile <path>       Chrome profile path (enables persistent context with saved passwords/cookies)
+  --browser <type>       Browser to use: chrome (default) or edge
+  --profile <path>       Browser profile path (enables persistent context with saved passwords/cookies)
   --headless             Run browser in headless mode
   --help, -h             Show this help message
 
@@ -30,7 +31,9 @@ EXAMPLES:
   web-pilot https://example.com
   web-pilot -u https://github.com -d ./output
   web-pilot --headless -u https://example.com
-  web-pilot --profile "C:\Users\username\AppData\Local\Google\Chrome\User Data"
+  web-pilot --browser edge
+  web-pilot --profile "C:\\\\Users\\\\username\\\\AppData\\\\Local\\\\Google\\\\Chrome\\\\User Data"
+  web-pilot --browser edge --profile "C:\\\\Users\\\\username\\\\AppData\\\\Local\\\\Microsoft\\\\Edge\\\\User Data"
 
 HOW IT WORKS:
   1. Web Pilot starts a browser and watches for commands in 'command.txt'
@@ -70,6 +73,7 @@ function parseArgs(args) {
     url: null,
     workDir: process.cwd(),
     headless: false,
+    browser: 'chrome',
     profile: null
   };
 
@@ -85,6 +89,14 @@ function parseArgs(args) {
       config.url = args[++i];
     } else if (arg === '--dir' || arg === '-d') {
       config.workDir = path.resolve(args[++i]);
+    } else if (arg === '--browser') {
+      const browser = args[++i]?.toLowerCase();
+      if (browser === 'chrome' || browser === 'edge') {
+        config.browser = browser;
+      } else {
+        console.error(`Invalid browser: ${browser}. Use 'chrome' or 'edge'.`);
+        process.exit(1);
+      }
     } else if (arg === '--profile') {
       config.profile = args[++i];
     } else if (arg === '--headless') {
@@ -112,6 +124,7 @@ async function main() {
   const pilot = new WebPilot({
     workDir: config.workDir,
     headless: config.headless,
+    browser: config.browser,
     profile: config.profile
   });
 
