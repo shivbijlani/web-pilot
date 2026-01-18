@@ -337,9 +337,8 @@ class WebPilot {
         
         this.context = await chromium.launchPersistentContext(this.config.profile, launchOptions);
         
-        // Get the first page or create a new one
-        const pages = this.context.pages();
-        this.page = pages.length > 0 ? pages[0] : await this.context.newPage();
+        // Create a fresh new page for web-pilot (don't use restored tabs from previous session)
+        this.page = await this.context.newPage();
       } else {
         // Standard launch without profile
         const launchOptions = {
