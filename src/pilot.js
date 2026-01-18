@@ -10,6 +10,7 @@
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 
 // Default configuration
 const DEFAULT_CONFIG = {
@@ -36,6 +37,41 @@ class WebPilot {
     // Resolve paths
     this.commandPath = path.join(this.config.workDir, this.config.commandFile);
     this.resultPath = path.join(this.config.workDir, this.config.resultFile);
+  }
+
+  /**
+   * Check if a browser process is running
+   */
+  isBrowserRunning(browserName) {
+    try {
+      const processName = browserName === 'edge' ? 'msedge.exe' : 'chrome.exe';
+      const result = execSync(`tasklist /FI "IMAGENAME eq ${processName}" /NH`, { encoding: 'utf-8' });
+      return result.toLowerCase().includes(processName.toLowerCase());
+    } catch (err) {
+      return false;
+    }
+  }
+
+  /**
+   * Display user-friendly error for locked profile
+   */
+  displayProfileLockedError(browserName) {
+    console.error('\n❌ ERROR: Browser Profile is Locked\n');
+    console.error(`The ${browserName} profile you specified is currently in use.\n`);
+    console.error(`This happens when ${browserName} is already running with that profile.\n`);
+    console.error('📋 How to fix this:\n');
+    console.error(`   1. Close all ${browserName} windows`);
+    console.error('   2. Check the system tray for any background browser processes');
+    console.error('   3. Wait a few seconds, then try again\n');
+    console.error('💡 Alternative solutions:\n');
+    console.error('   • Run web-pilot WITHOUT --profile to use a fresh browser session');
+    console.error(`   • Create a dedicated ${browserName} profile just for web-pilot`);
+    console.error(`   • Use a different profile path that isn't currently active\n`);
+    
+    if (this.isBrowserRunning(this.config.browser)) {
+      console.error(`⚠️  Detected ${browserName} is currently running!`);
+      console.error(`   Please close ${browserName} completely and try again.\n`);
+    }
   }
 
   /**
@@ -72,36 +108,48 @@ class WebPilot {
     // Determine Playwright channel based on browser choice
     const channel = this.config.browser === 'edge' ? 'msedge' : undefined;
     
-    if (this.config.profile) {
-      // Use persistent context when profile path is provided
-      console.log(`📂 Using ${browserName} profile: ${this.config.profile}`);
-      const launchOptions = {
-        headless: this.config.headless,
-        viewport: this.config.viewport,
-        args: ['--start-maximized']
-      };
-      if (channel) launchOptions.channel = channel;
-      
-      this.context = await chromium.launchPersistentContext(this.config.profile, launchOptions);
-      
-      // Get the first page or create a new one
-      const pages = this.context.pages();
-      this.page = pages.length > 0 ? pages[0] : await this.context.newPage();
-    } else {
-      // Standard launch without profile
-      const launchOptions = {
-        headless: this.config.headless,
-        args: ['--start-maximized']
-      };
-      if (channel) launchOptions.channel = channel;
-      
-      this.browser = await chromium.launch(launchOptions);
+    try {
+      if (this.config.profile) {
+        // Use persistent context when profile path is provided
+        console.log(`📂 Using ${browserName} profile: ${this.config.profile}`);
+        const launchOptions = {
+          headless: this.config.headless,
+          viewport: this.config.viewport,
+          args: ['--start-maximized']
+        };
+        if (channel) launchOptions.channel = channel;
+        
+        this.context = await chromium.launchPersistentContext(this.config.profile, launchOptions);
+        
+        // Get the first page or create a new one
+        const pages = this.context.pages();
+        this.page = pages.length > 0 ? pages[0] : await this.context.newPage();
+      } else {
+        // Standard launch without profile
+        const launchOptions = {
+          headless: this.config.headless,
+          args: ['--start-maximized']
+        };
+        if (channel) launchOptions.channel = channel;
+        
+        this.browser = await chromium.launch(launchOptions);
 
-      this.context = await this.browser.newContext({
-        viewport: this.config.viewport
-      });
-      
-      this.page = await this.context.newPage();
+        this.context = await this.browser.newContext({
+          viewport: this.config.viewport
+        });
+        
+        this.page = await this.context.newPage();
+      }
+    } catch (error) {
+      // Check if it's a locked profile error
+      if (this.config.profile && (error.message.includes('has been closed') || 
+          error.message.includes('Target closed') ||
+          error.message.includes('Browser closed'))) {
+        this.displayProfileLockedError(browserName);
+        process.exit(1);
+      }
+      // Re-throw other errors
+      throw error;
     }
 
     if (initialUrl) {
