@@ -12,6 +12,7 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 const os = require('os');
+const readline = require('readline');
 
 // Default configuration
 const DEFAULT_CONFIG = {
@@ -73,11 +74,164 @@ class WebPilot {
     }
   }
 
+  /**
+   * List available profiles in a browser's User Data directory
+   */
+  static listProfiles(userDataDir) {
+    try {
+      if (!fs.existsSync(userDataDir)) {
+        return [];
+      }
+
+      // First, try to read Local State for profile metadata
+      const localStatePath = path.join(userDataDir, 'Local State');
+      let profileInfoCache = {};
+      
+      if (fs.existsSync(localStatePath)) {
+        try {
+          const localState = JSON.parse(fs.readFileSync(localStatePath, 'utf-8'));
+          profileInfoCache = localState?.profile?.info_cache || {};
+        } catch (err) {
+          // Continue without metadata
+        }
+      }
+
+      const profiles = [];
+      const entries = fs.readdirSync(userDataDir, { withFileTypes: true });
+
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        
+        // Check if it's a profile directory (Default, Profile 1, Profile 2, etc.)
+        const dirName = entry.name;
+        if (dirName === 'Default' || dirName.startsWith('Profile ')) {
+          const profilePath = path.join(userDataDir, dirName);
+          
+          // Get profile metadata from Local State
+          const metadata = profileInfoCache[dirName];
+          let displayName = dirName;
+          
+          if (metadata) {
+            // Prefer user_name (email), then gaia_name (full name), then shortcut_name
+            displayName = metadata.user_name || metadata.gaia_name || metadata.shortcut_name || metadata.name || dirName;
+          }
+          
+          profiles.push({
+            path: profilePath,
+            dirName: dirName,
+            displayName: displayName,
+            userName: metadata?.user_name || '',
+            fullName: metadata?.gaia_name || ''
+          });
+        }
+      }
+
+      return profiles;
+    } catch (err) {
+      return [];
+    }
+  }
+
+  /**
+   * Prompt user to select a profile
+   */
+  static async promptProfileSelection(profiles, browserName) {
+    return new Promise((resolve) => {
+      console.log(`\n📂 Multiple ${browserName} profiles detected:\n`);
+      
+      profiles.forEach((profile, index) => {
+        // Build a helpful display name
+        let displayText = '';
+        
+        // Prefer email (user_name) first as it's most specific
+        if (profile.userName) {
+          displayText = profile.userName;
+        } else if (profile.fullName) {
+          displayText = profile.fullName;
+        } else {
+          displayText = profile.displayName;
+        }
+        
+        // Always show the folder name in brackets
+        displayText += ` [${profile.dirName}]`;
+        
+        console.log(`   ${index + 1}. ${displayText}`);
+      });
+      console.log(`   ${profiles.length + 1}. Use fresh session (no profile)\n`);
+
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+      });
+
+      rl.question('Select profile number: ', (answer) => {
+        rl.close();
+        
+        const choice = parseInt(answer);
+        if (choice >= 1 && choice <= profiles.length) {
+          resolve(profiles[choice - 1].path);
+        } else if (choice === profiles.length + 1) {
+          resolve(null); // No profile
+        } else {
+          console.log('Invalid selection. Using first profile.');
+          resolve(profiles[0].path);
+        }
+      });
+    });
+  }
+
   constructor(config = {}) {
-    // Auto-detect browser and profile if not provided
+    // Store config for async initialization
+    this._config = config;
+    this.browser = null;
+    this.context = null;
+    this.page = null;
+    this.running = false;
+    this.lastCommand = '';
+    this.config = null; // Will be set in initialize()
+  }
+
+  /**
+   * Initialize the WebPilot instance (async)
+   */
+  async initialize() {
+    const config = this._config;
+    
+    // Auto-detect browser if not provided
     const detectedBrowser = config.browser || WebPilot.detectDefaultBrowser();
-    const detectedProfile = config.profile !== undefined ? config.profile : 
-                           (config.autoProfile !== false ? WebPilot.getDefaultProfilePath(detectedBrowser) : null);
+    
+    // Handle profile selection
+    let detectedProfile;
+    
+    if (config.profile !== undefined) {
+      // Explicitly set by user
+      detectedProfile = config.profile;
+    } else if (config.autoProfile === false) {
+      // User explicitly disabled auto profile
+      detectedProfile = null;
+    } else {
+      // Auto-detect profile with selection
+      const userDataDir = WebPilot.getDefaultProfilePath(detectedBrowser);
+      
+      if (userDataDir) {
+        const profiles = WebPilot.listProfiles(userDataDir);
+        
+        if (profiles.length > 1) {
+          // Multiple profiles - ask user to choose
+          const browserName = detectedBrowser === 'edge' ? 'Edge' : 'Chrome';
+          const selectedProfilePath = await WebPilot.promptProfileSelection(profiles, browserName);
+          detectedProfile = selectedProfilePath;
+        } else if (profiles.length === 1) {
+          // Single profile - use it
+          detectedProfile = profiles[0].path;
+        } else {
+          // No profiles found
+          detectedProfile = null;
+        }
+      } else {
+        detectedProfile = null;
+      }
+    }
     
     this.config = { 
       ...DEFAULT_CONFIG, 
@@ -86,15 +240,11 @@ class WebPilot {
       profile: detectedProfile
     };
     
-    this.browser = null;
-    this.context = null;
-    this.page = null;
-    this.running = false;
-    this.lastCommand = '';
-    
     // Resolve paths
     this.commandPath = path.join(this.config.workDir, this.config.commandFile);
     this.resultPath = path.join(this.config.workDir, this.config.resultFile);
+    
+    return this;
   }
 
   /**

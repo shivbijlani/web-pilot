@@ -137,9 +137,11 @@ async function main() {
     workDir: config.workDir,
     headless: config.headless,
     browser: config.browser,
-    profile: config.profile
+    profile: config.profile,
+    autoProfile: config.autoProfile
   });
 
+  await pilot.initialize();
   await pilot.start(config.url);
 }
 

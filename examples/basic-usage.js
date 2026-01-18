@@ -37,6 +37,7 @@ async function main() {
   
   // Start Web Pilot
   const pilot = new WebPilot({ workDir });
+  await pilot.initialize();
   
   // Start in background (don't await - it runs forever)
   pilot.start('https://example.com').catch(console.error);
