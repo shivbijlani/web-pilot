@@ -327,6 +327,7 @@ class WebPilot {
       if (this.config.profile) {
         // Use persistent context when profile path is provided
         console.log(`📂 Using ${browserName} profile: ${this.config.profile}`);
+        console.log(`   Profile directory: ${path.basename(this.config.profile)}\n`);
         const launchOptions = {
           headless: this.config.headless,
           viewport: this.config.viewport,
