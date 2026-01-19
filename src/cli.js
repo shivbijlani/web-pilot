@@ -24,6 +24,8 @@ OPTIONS:
   --browser <type>       Browser to use: chrome or edge (auto-detected if not specified)
   --profile <path>       Browser profile path (auto-detected if not specified)
   --no-profile           Disable profile - use fresh browser session
+  --select-profile       Select and save browser profile (setup mode, then exit)
+  --background           Run in background (detached process, recommended for LLM/Copilot)
   --headless             Run browser in headless mode
   --help, -h             Show this help message
 
@@ -33,6 +35,8 @@ AUTO-DETECTION:
   can just run 'web-pilot' without any arguments!
 
 EXAMPLES:
+  web-pilot --select-profile   # First-time setup: select and save profile
+  web-pilot --background       # Run in background (requires saved profile)
   web-pilot                    # Auto-detect browser and profile
   web-pilot https://example.com
   web-pilot --no-profile       # Use fresh session without profile
@@ -80,6 +84,8 @@ function parseArgs(args) {
     url: null,
     workDir: process.cwd(),
     headless: false,
+    background: false,
+    selectProfile: false,
     browser: null, // Will be auto-detected if not specified
     profile: undefined, // undefined means auto-detect, null means disabled
     autoProfile: true
@@ -111,6 +117,10 @@ function parseArgs(args) {
     } else if (arg === '--no-profile') {
       config.profile = null;
       config.autoProfile = false;
+    } else if (arg === '--select-profile') {
+      config.selectProfile = true;
+    } else if (arg === '--background') {
+      config.background = true;
     } else if (arg === '--headless') {
       config.headless = true;
     } else if (!arg.startsWith('-') && !config.url) {
@@ -126,6 +136,45 @@ async function main() {
   const args = process.argv.slice(2);
   const config = parseArgs(args);
 
+  // If background mode requested, spawn detached process
+  if (config.background) {
+    const { spawn } = require('child_process');
+    const fs = require('fs');
+    const path = require('path');
+    
+    // Remove --background flag from args
+    const childArgs = args.filter(arg => arg !== '--background');
+    
+    // Create log file for background process output
+    const logPath = path.join(config.workDir, 'web-pilot.log');
+    const logFd = fs.openSync(logPath, 'w');
+    
+    // Spawn detached process with output redirected to log file
+    const child = spawn(process.argv[0], [process.argv[1], ...childArgs], {
+      detached: true,
+      stdio: ['ignore', logFd, logFd],
+      cwd: config.workDir,
+      env: { ...process.env, WEB_PILOT_BACKGROUND: '1' }
+    });
+    
+    child.unref();
+    
+    console.log(`
+╔══════════════════════════════════════════════════════════════════╗
+║                        🌐 WEB PILOT                              ║
+║         LLM-Driven Browser Automation & Control                  ║
+╚══════════════════════════════════════════════════════════════════╝
+`);
+    console.log(`🚀 Web Pilot started in background (PID: ${child.pid})`);
+    console.log(`📁 Working directory: ${config.workDir}`);
+    console.log(`📄 Log file: ${logPath}`);
+    console.log(`\n   The process is now detached and running in the background.`);
+    console.log(`   Terminal is free for other commands!`);
+    console.log(`   Check ${path.basename(logPath)} for startup messages.\n`);
+    
+    process.exit(0);
+  }
+
   console.log(`
 ╔══════════════════════════════════════════════════════════════════╗
 ║                        🌐 WEB PILOT                              ║
@@ -133,15 +182,27 @@ async function main() {
 ╚══════════════════════════════════════════════════════════════════╝
 `);
 
+
+
   const pilot = new WebPilot({
     workDir: config.workDir,
     headless: config.headless,
     browser: config.browser,
     profile: config.profile,
-    autoProfile: config.autoProfile
+    autoProfile: config.autoProfile,
+    background: config.background,
+    selectProfile: config.selectProfile
   });
 
   await pilot.initialize();
+  
+  // If --select-profile mode, exit after initialization (profile saved)
+  if (config.selectProfile) {
+    console.log('\n✅ Profile selection complete!');
+    console.log('   You can now run with --background flag.\n');
+    process.exit(0);
+  }
+  
   await pilot.start(config.url);
 }
 

@@ -10,6 +10,10 @@ tables.txt
 tables.json
 command.txt
 result.txt
+web-pilot.log
+
+# User preferences (should not be committed)
+.web-pilot-prefs.json
 
 # OS files
 .DS_Store

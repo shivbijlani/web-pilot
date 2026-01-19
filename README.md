@@ -189,6 +189,36 @@ web-pilot/
 - Login sessions may expire; human intervention needed for authentication
 - File-based communication has ~1 second latency
 
+## 🔧 Development & Testing
+
+### Background Execution (Recommended)
+
+For development and testing, use the helper scripts to run web-pilot in the background:
+
+```powershell
+# Windows PowerShell
+.\start-background.ps1   # Start web-pilot as background job
+.\stop-background.ps1    # Stop background job and cleanup
+```
+
+This keeps your terminal free while web-pilot runs in the background. The PID is displayed for verification.
+
+### Development Guidelines
+
+See these files for detailed development guidance:
+- **`.copilot-instructions.md`** - Copilot-specific testing workflow
+- **`.copilot-constitution.md`** - Core principles and automation rules
+- **`start-background.ps1`** - Helper script to start in background
+- **`stop-background.ps1`** - Helper script to stop and cleanup
+
+### Profile Preferences
+
+On first run, web-pilot will detect your default browser and let you select a profile. Your selection is saved to `.web-pilot-prefs.json` for future runs. To reset:
+
+```powershell
+Remove-Item .web-pilot-prefs.json
+```
+
 ## 🤝 Contributing
 
 Contributions are welcome! Feel free to:
@@ -196,6 +226,8 @@ Contributions are welcome! Feel free to:
 - Improve error handling
 - Add support for multiple browser tabs
 - Create integrations for specific LLM platforms
+
+Please review `.copilot-constitution.md` for development principles.
 
 ## 📄 License
 

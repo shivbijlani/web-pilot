@@ -29,6 +29,46 @@ const DEFAULT_CONFIG = {
 
 class WebPilot {
   /**
+   * Get path to preferences file
+   */
+  static getPreferencesPath() {
+    return path.join(process.cwd(), '.web-pilot-prefs.json');
+  }
+
+  /**
+   * Load saved preferences
+   */
+  static loadPreferences() {
+    try {
+      const prefsPath = WebPilot.getPreferencesPath();
+      if (fs.existsSync(prefsPath)) {
+        const data = fs.readFileSync(prefsPath, 'utf-8');
+        return JSON.parse(data);
+      }
+    } catch (err) {
+      // Ignore errors, return null
+    }
+    return null;
+  }
+
+  /**
+   * Save preferences
+   */
+  static savePreferences(browser, profile) {
+    try {
+      const prefsPath = WebPilot.getPreferencesPath();
+      const prefs = {
+        browser,
+        profile,
+        savedAt: new Date().toISOString()
+      };
+      fs.writeFileSync(prefsPath, JSON.stringify(prefs, null, 2));
+    } catch (err) {
+      // Ignore save errors
+    }
+  }
+
+  /**
    * Detect the system's default browser
    */
   static detectDefaultBrowser() {
@@ -197,18 +237,38 @@ class WebPilot {
   async initialize() {
     const config = this._config;
     
+    // Try to load saved preferences first
+    const savedPrefs = WebPilot.loadPreferences();
+    
     // Auto-detect browser if not provided
-    const detectedBrowser = config.browser || WebPilot.detectDefaultBrowser();
+    let detectedBrowser = config.browser;
+    if (!detectedBrowser && savedPrefs?.browser) {
+      detectedBrowser = savedPrefs.browser;
+      console.log(`📋 Using saved browser preference: ${detectedBrowser}`);
+    } else if (!detectedBrowser) {
+      detectedBrowser = WebPilot.detectDefaultBrowser();
+    }
     
     // Handle profile selection
     let detectedProfile;
     
     if (config.profile !== undefined) {
-      // Explicitly set by user
+      // Explicitly set by user via CLI
       detectedProfile = config.profile;
     } else if (config.autoProfile === false) {
       // User explicitly disabled auto profile
       detectedProfile = null;
+    } else if (savedPrefs?.profile) {
+      // Use saved profile preference
+      detectedProfile = savedPrefs.profile;
+      console.log(`📋 Using saved profile preference: ${path.basename(detectedProfile)}`);
+    } else if (config.background || process.env.WEB_PILOT_BACKGROUND) {
+      // Background mode without saved preferences - ERROR
+      console.error(`\n❌ ERROR: Background mode requires saved profile preferences.`);
+      console.error(`\n   First-time setup required:`);
+      console.error(`   Run: node src/cli.js --select-profile`);
+      console.error(`\n   This will let you select a profile and save it for future runs.\n`);
+      process.exit(1);
     } else {
       // Auto-detect profile with selection
       const userDataDir = WebPilot.getDefaultProfilePath(detectedBrowser);
@@ -221,9 +281,15 @@ class WebPilot {
           const browserName = detectedBrowser === 'edge' ? 'Edge' : 'Chrome';
           const selectedProfilePath = await WebPilot.promptProfileSelection(profiles, browserName);
           detectedProfile = selectedProfilePath;
+          
+          // Save preferences for future runs
+          WebPilot.savePreferences(detectedBrowser, detectedProfile);
+          console.log(`\n💾 Preferences saved to ${WebPilot.getPreferencesPath()}`);
+          console.log(`   Next time you can run in background mode!\n`);
         } else if (profiles.length === 1) {
-          // Single profile - use it
+          // Single profile - use it and save
           detectedProfile = profiles[0].path;
+          WebPilot.savePreferences(detectedBrowser, detectedProfile);
         } else {
           // No profiles found
           detectedProfile = null;
@@ -389,7 +455,9 @@ class WebPilot {
       console.log(`   ${cmd.padEnd(25)} - ${desc}`);
     });
     
-    console.log('\n⏳ Listening for commands...\n');
+    const pid = process.pid;
+    const timestamp = new Date().toLocaleString();
+    console.log(`\n⏳ Listening for commands... [PID: ${pid}] [Started: ${timestamp}]\n`);
 
     // Start command polling loop
     this.running = true;
