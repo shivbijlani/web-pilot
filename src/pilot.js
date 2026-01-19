@@ -299,6 +299,7 @@ class WebPilot {
       'type:<selector>:<text>': 'Type text into an input field',
       'wait:<seconds>': 'Wait for specified seconds',
       'scroll:<direction>': 'Scroll the page (up/down/top/bottom)',
+      'execute:<javascript>': 'Execute JavaScript code in browser context',
       'back': 'Go back in browser history',
       'forward': 'Go forward in browser history',
       'refresh': 'Refresh the current page',
@@ -516,6 +517,11 @@ class WebPilot {
         return await this.scroll(direction);
       }
       
+      if (command.startsWith('execute:')) {
+        const code = command.substring(8).trim();
+        return await this.executeJavaScript(code);
+      }
+      
       return `ERROR: Unknown command: ${command}`;
       
     } catch (err) {
@@ -626,6 +632,39 @@ class WebPilot {
         return 'Scrolled to bottom';
       default:
         return `Unknown scroll direction: ${direction}`;
+    }
+  }
+
+  /**
+   * Execute JavaScript code in the browser context
+   */
+  async executeJavaScript(code) {
+    try {
+      // Execute the code with a timeout
+      const result = await Promise.race([
+        this.page.evaluate((code) => {
+          // Use indirect eval to execute in global scope
+          const fn = new Function('return ' + code);
+          return fn();
+        }, code),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Execution timeout')), 30000)
+        )
+      ]);
+
+      // Handle undefined result
+      if (result === undefined) {
+        return 'undefined';
+      }
+
+      // Convert result to string
+      if (typeof result === 'object') {
+        return JSON.stringify(result, null, 2);
+      }
+
+      return String(result);
+    } catch (error) {
+      return `ERROR: ${error.message}`;
     }
   }
 
